@@ -1,26 +1,40 @@
 package merkle
 
 import (
+	"hash"
+
 	"github.com/tendermint/tendermint/crypto/tmhash"
 )
 
-// TODO: make these have a large predefined capacity
-var (
-	leafPrefix  = []byte{0}
-	innerPrefix = []byte{1}
+const (
+	leafPrefix  = 0
+	innerPrefix = 1
 )
 
-// returns tmhash(<empty>)
-func emptyHash() []byte {
-	return tmhash.Sum([]byte{})
+type merkleHasher struct {
+	state hash.Hash
 }
 
-// returns tmhash(0x00 || leaf)
-func leafHash(leaf []byte) []byte {
-	return tmhash.Sum(append(leafPrefix, leaf...))
+func newMerkleHasher() merkleHasher {
+	return merkleHasher{state: tmhash.New()}
 }
 
-// returns tmhash(0x01 || left || right)
-func innerHash(left []byte, right []byte) []byte {
-	return tmhash.Sum(append(innerPrefix, append(left, right...)...))
+func (mh *merkleHasher) emptyHash() []byte {
+	mh.state.Reset()
+	return mh.state.Sum(nil)
+}
+
+func (mh *merkleHasher) leafHash(leaf []byte) []byte {
+	mh.state.Reset()
+	mh.state.Write([]byte{leafPrefix})
+	mh.state.Write(leaf)
+	return mh.state.Sum(nil)
+}
+
+func (mh *merkleHasher) innerHash(left []byte, right []byte) []byte {
+	mh.state.Reset()
+	mh.state.Write([]byte{innerPrefix})
+	mh.state.Write(left)
+	mh.state.Write(right)
+	return mh.state.Sum(nil)
 }

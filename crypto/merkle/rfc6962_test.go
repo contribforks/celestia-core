@@ -30,6 +30,7 @@ func TestRFC6962Hasher(t *testing.T) {
 	emptyLeafHash := leafHashTrail.Hash
 	_, emptyHashTrail := trailsFromByteSlices([][]byte{})
 	emptyTreeHash := emptyHashTrail.Hash
+	hasher := newMerkleHasher()
 	for _, tc := range []struct {
 		desc string
 		got  []byte
@@ -60,7 +61,7 @@ func TestRFC6962Hasher(t *testing.T) {
 		{
 			desc: "RFC6962 Node",
 			want: "aa217fe888e47007fa15edab33c2b492a722cb106c64667fc2b044444de66bbb"[:tmhash.Size*2],
-			got:  innerHash([]byte("N123"), []byte("N456")),
+			got:  hasher.innerHash([]byte("N123"), []byte("N456")),
 		},
 	} {
 		tc := tc

@@ -50,7 +50,8 @@ func ProofsFromByteSlices(items [][]byte) (rootHash []byte, proofs []*Proof) {
 // Verify that the Proof proves the root hash.
 // Check sp.Index/sp.Total manually if needed
 func (sp *Proof) Verify(rootHash []byte, leaf []byte) error {
-	leafHash := leafHash(leaf)
+	hasher := newMerkleHasher()
+	leafHash := hasher.leafHash(leaf)
 	if sp.Total < 0 {
 		return errors.New("proof total must be positive")
 	}
@@ -149,6 +150,10 @@ func ProofFromProto(pb *tmcrypto.Proof) (*Proof, error) {
 // If the length of the innerHashes slice isn't exactly correct, the result is nil.
 // Recursive impl.
 func computeHashFromAunts(index, total int64, leafHash []byte, innerHashes [][]byte) []byte {
+	return computeHashFromAuntsWithHasher(newMerkleHasher(), index, total, leafHash, innerHashes)
+}
+
+func computeHashFromAuntsWithHasher(hasher merkleHasher, index, total int64, leafHash []byte, innerHashes [][]byte) []byte {
 	if index >= total || index < 0 || total <= 0 {
 		return nil
 	}
@@ -166,17 +171,17 @@ func computeHashFromAunts(index, total int64, leafHash []byte, innerHashes [][]b
 		}
 		numLeft := getSplitPoint(total)
 		if index < numLeft {
-			leftHash := computeHashFromAunts(index, numLeft, leafHash, innerHashes[:len(innerHashes)-1])
+			leftHash := computeHashFromAuntsWithHasher(hasher, index, numLeft, leafHash, innerHashes[:len(innerHashes)-1])
 			if leftHash == nil {
 				return nil
 			}
-			return innerHash(leftHash, innerHashes[len(innerHashes)-1])
+			return hasher.innerHash(leftHash, innerHashes[len(innerHashes)-1])
 		}
-		rightHash := computeHashFromAunts(index-numLeft, total-numLeft, leafHash, innerHashes[:len(innerHashes)-1])
+		rightHash := computeHashFromAuntsWithHasher(hasher, index-numLeft, total-numLeft, leafHash, innerHashes[:len(innerHashes)-1])
 		if rightHash == nil {
 			return nil
 		}
-		return innerHash(innerHashes[len(innerHashes)-1], rightHash)
+		return hasher.innerHash(innerHashes[len(innerHashes)-1], rightHash)
 	}
 }
 
@@ -214,18 +219,22 @@ func (spn *ProofNode) FlattenAunts() [][]byte {
 // trails[0].Hash is the leaf hash for items[0].
 // trails[i].Parent.Parent....Parent == root for all i.
 func trailsFromByteSlices(items [][]byte) (trails []*ProofNode, root *ProofNode) {
+	return recursiveHasherTrails(newMerkleHasher(), items)
+}
+
+func recursiveHasherTrails(hasher merkleHasher, items [][]byte) (trails []*ProofNode, root *ProofNode) {
 	// Recursive impl.
 	switch len(items) {
 	case 0:
-		return []*ProofNode{}, &ProofNode{emptyHash(), nil, nil, nil}
+		return []*ProofNode{}, &ProofNode{hasher.emptyHash(), nil, nil, nil}
 	case 1:
-		trail := &ProofNode{leafHash(items[0]), nil, nil, nil}
+		trail := &ProofNode{hasher.leafHash(items[0]), nil, nil, nil}
 		return []*ProofNode{trail}, trail
 	default:
 		k := getSplitPoint(int64(len(items)))
-		lefts, leftRoot := trailsFromByteSlices(items[:k])
-		rights, rightRoot := trailsFromByteSlices(items[k:])
-		rootHash := innerHash(leftRoot.Hash, rightRoot.Hash)
+		lefts, leftRoot := recursiveHasherTrails(hasher, items[:k])
+		rights, rightRoot := recursiveHasherTrails(hasher, items[k:])
+		rootHash := hasher.innerHash(leftRoot.Hash, rightRoot.Hash)
 		root := &ProofNode{rootHash, nil, nil, nil}
 		leftRoot.Parent = root
 		leftRoot.Right = rightRoot

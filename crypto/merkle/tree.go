@@ -7,16 +7,20 @@ import (
 // HashFromByteSlices computes a Merkle tree where the leaves are the byte slice,
 // in the provided order. It follows RFC-6962.
 func HashFromByteSlices(items [][]byte) []byte {
+	return hashRecursive(newMerkleHasher(), items)
+}
+
+func hashRecursive(hasher merkleHasher, items [][]byte) []byte {
 	switch len(items) {
 	case 0:
-		return emptyHash()
+		return hasher.emptyHash()
 	case 1:
-		return leafHash(items[0])
+		return hasher.leafHash(items[0])
 	default:
 		k := getSplitPoint(int64(len(items)))
-		left := HashFromByteSlices(items[:k])
-		right := HashFromByteSlices(items[k:])
-		return innerHash(left, right)
+		left := hashRecursive(hasher, items[:k])
+		right := hashRecursive(hasher, items[k:])
+		return hasher.innerHash(left, right)
 	}
 }
 
@@ -61,16 +65,17 @@ func HashFromByteSlices(items [][]byte) []byte {
 // implementation for so little benefit.
 func HashFromByteSlicesIterative(input [][]byte) []byte {
 	items := make([][]byte, len(input))
+	hasher := newMerkleHasher()
 
 	for i, leaf := range input {
-		items[i] = leafHash(leaf)
+		items[i] = hasher.leafHash(leaf)
 	}
 
 	size := len(items)
 	for {
 		switch size {
 		case 0:
-			return emptyHash()
+			return hasher.emptyHash()
 		case 1:
 			return items[0]
 		default:
@@ -78,7 +83,7 @@ func HashFromByteSlicesIterative(input [][]byte) []byte {
 			wp := 0 // write position
 			for rp < size {
 				if rp+1 < size {
-					items[wp] = innerHash(items[rp], items[rp+1])
+					items[wp] = hasher.innerHash(items[rp], items[rp+1])
 					rp += 2
 				} else {
 					items[wp] = items[rp]
